@@ -23,10 +23,10 @@
 
 #pragma once
 
+#include <liblangutil/Exceptions.h>
 #include <libsolidity/ast/ASTAnnotations.h>
 #include <libsolidity/ast/ASTVisitor.h>
 #include <libsolidity/interface/CompilerStack.h>
-#include <liblangutil/Exceptions.h>
 
 #include <json/json.h>
 #include <libsolutil/JSON.h>
@@ -36,6 +36,9 @@
 #include <ostream>
 #include <stack>
 #include <vector>
+// pororo
+#include <map>
+#include <string>
 
 namespace solidity::langutil
 {
@@ -56,12 +59,13 @@ public:
 	/// @a _sourceIndices is used to abbreviate source names in source locations.
 	explicit ASTJsonExporter(
 		CompilerStack::State _stackState,
-		std::map<std::string, unsigned> _sourceIndices = std::map<std::string, unsigned>()
-	);
+		std::map<std::string, unsigned> _sourceIndices = std::map<std::string, unsigned>());
 	/// Output the json representation of the AST to _stream.
 	void print(std::ostream& _stream, ASTNode const& _node, util::JsonFormat const& _format);
+	// ADDED BY pororo
+	void printAST(std::ostream& _stream, ASTNode const& _node, util::JsonFormat const& _format);
 	Json::Value toJson(ASTNode const& _node);
-	template <class T>
+	template<class T>
 	Json::Value toJson(std::vector<ASTPointer<T>> const& _nodes)
 	{
 		Json::Value ret(Json::arrayValue);
@@ -131,41 +135,32 @@ public:
 	void endVisit(EventDefinition const&) override;
 
 	bool visitNode(ASTNode const& _node) override;
+
 private:
 	void setJsonNode(
 		ASTNode const& _node,
 		std::string const& _nodeName,
-		std::initializer_list<std::pair<std::string, Json::Value>>&& _attributes
-	);
+		std::initializer_list<std::pair<std::string, Json::Value>>&& _attributes);
 	void setJsonNode(
 		ASTNode const& _node,
 		std::string const& _nodeName,
-		std::vector<std::pair<std::string, Json::Value>>&& _attributes
-	);
+		std::vector<std::pair<std::string, Json::Value>>&& _attributes);
 	/// Maps source location to an index, if source is valid and a mapping does exist, otherwise returns std::nullopt.
 	std::optional<size_t> sourceIndexFromLocation(langutil::SourceLocation const& _location) const;
 	std::string sourceLocationToString(langutil::SourceLocation const& _location) const;
 	Json::Value sourceLocationsToJson(std::vector<langutil::SourceLocation> const& _sourceLocations) const;
 	static std::string namePathToString(std::vector<ASTString> const& _namePath);
-	static Json::Value idOrNull(ASTNode const* _pt)
-	{
-		return _pt ? Json::Value(nodeId(*_pt)) : Json::nullValue;
-	}
-	Json::Value toJsonOrNull(ASTNode const* _node)
-	{
-		return _node ? toJson(*_node) : Json::nullValue;
-	}
-	Json::Value inlineAssemblyIdentifierToJson(std::pair<yul::Identifier const* , InlineAssemblyAnnotation::ExternalIdentifierInfo> _info) const;
+	static Json::Value idOrNull(ASTNode const* _pt) { return _pt ? Json::Value(nodeId(*_pt)) : Json::nullValue; }
+	Json::Value toJsonOrNull(ASTNode const* _node) { return _node ? toJson(*_node) : Json::nullValue; }
+	Json::Value inlineAssemblyIdentifierToJson(
+		std::pair<yul::Identifier const*, InlineAssemblyAnnotation::ExternalIdentifierInfo> _info) const;
 	static std::string location(VariableDeclaration::Location _location);
 	static std::string contractKind(ContractKind _kind);
 	static std::string functionCallKind(FunctionCallKind _kind);
 	static std::string literalTokenKind(Token _token);
 	static std::string type(Expression const& _expression);
 	static std::string type(VariableDeclaration const& _varDecl);
-	static int64_t nodeId(ASTNode const& _node)
-	{
-		return _node.id();
-	}
+	static int64_t nodeId(ASTNode const& _node) { return _node.id(); }
 	template<class Container>
 	static Json::Value getContainerIds(Container const& _container, bool _order = false)
 	{
@@ -188,19 +183,20 @@ private:
 	static Json::Value typePointerToJson(Type const* _tp, bool _withoutDataLocation = false);
 	static Json::Value typePointerToJson(std::optional<FuncCallArguments> const& _tps);
 	void appendExpressionAttributes(
-		std::vector<std::pair<std::string, Json::Value>> &_attributes,
-		ExpressionAnnotation const& _annotation
-	);
+		std::vector<std::pair<std::string, Json::Value>>& _attributes, ExpressionAnnotation const& _annotation);
 	static void appendMove(Json::Value& _array, Json::Value&& _value)
 	{
 		solAssert(_array.isArray(), "");
 		_array.append(std::move(_value));
 	}
 
-	CompilerStack::State m_stackState = CompilerStack::State::Empty; ///< Used to only access information that already exists
-	bool m_inEvent = false; ///< whether we are currently inside an event or not
+	CompilerStack::State m_stackState
+		= CompilerStack::State::Empty; ///< Used to only access information that already exists
+	bool m_inEvent = false;			   ///< whether we are currently inside an event or not
 	Json::Value m_currentValue;
 	std::map<std::string, unsigned> m_sourceIndices;
+	// pororo
+	void findAllReferencedDeclarations(const Json::Value json_value);
 };
 
 }
