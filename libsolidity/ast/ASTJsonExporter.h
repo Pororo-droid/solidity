@@ -196,7 +196,8 @@ private:
 	Json::Value m_currentValue;
 	std::map<std::string, unsigned> m_sourceIndices;
 	// pororo
-	void findAllReferencedDeclarations(const Json::Value json_value);
+	void findAllReferencedDeclarations(const Json::Value json_value, std::vector<Json::String>& allReferencedDeclarations);
+	void parseReferencedDeclaration(std::vector<Json::String> allReferencedDeclarations, std::map<Json::Value::Int, Json::String> variableMap);
 };
 
 }

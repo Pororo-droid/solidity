@@ -193,80 +193,106 @@ Json::Value ASTJsonExporter::inlineAssemblyIdentifierToJson(
 	return tuple;
 }
 
-void ASTJsonExporter::findAllReferencedDeclarations(const Json::Value json_value)
+// added by pororo
+void ASTJsonExporter::findAllReferencedDeclarations(const Json::Value json_value, std::vector<Json::String>& allReferencedDeclarations)
 {
-	Json::Value::Members members = json_value.getMemberNames();
-	// std::cout << json_value["exportedSymbols"] << std::endl << std::endl;
-	// std::cout << json_value["exportedSymbols"].size() << std::endl << std::endl;
-	// std::cout << json_value << std::endl << std::endl;
+	Json::Value::Members members;
+	try 
+	{
+		members = json_value.getMemberNames();
+	} catch (const std::exception& e) 
+	{
+		return;
+	}
+
 	for (auto const& member: members)
 	{
-		// std::cout << member << std::endl;
-		try
+		if (member == "nodeType" && json_value["nodeType"] == "FunctionDefinition")
 		{
-			if (member == "referencedDeclaration")
-			{
-				std::cout << json_value[member] << std::endl;
-				return;
-			}
-
-			if (json_value[member].size() == 0)
-				continue;
-			else if (json_value[member].size() == 1)
-			{
-				findAllReferencedDeclarations(json_value[member]);
-			}
-			else
-			{
-				// probably nodes
-				for (auto const& node: json_value[member])
-				{
-					findAllReferencedDeclarations(node);
-				}
-			}
-			// std::cout << member << json_value[member].size() << " ";
-			// Json::Value::Members t_m = json_value[member].getMemberNames();
-			// 	for (auto const& m: t_m)
-			// 	{
-			// 		std::cout << m << std::endl;
-			// 	}
+			Json::String flag = "|";
+			allReferencedDeclarations.push_back(flag);
+			if (json_value["name"].asString() != "")	allReferencedDeclarations.push_back(json_value["name"].asString());
+			else allReferencedDeclarations.push_back(json_value["kind"].asString());
 		}
-		catch (const std::exception& e)
+	}
+
+	for (auto const& member: members)
+	{
+		if (member == "referencedDeclaration")
 		{
-			std::cout << "not value " << std::endl;
+			Json::String value = json_value[member].asString();	
+			allReferencedDeclarations.push_back(value);
+			return;
+		}
+		if (json_value[member].size() == 0)
+			continue;
+		
+		findAllReferencedDeclarations(json_value[member], allReferencedDeclarations);
+		for(auto const& node: json_value[member]) {
+			findAllReferencedDeclarations(node, allReferencedDeclarations);
 		}
 	}
 }
 
-// added by pororo
+void ASTJsonExporter::parseReferencedDeclaration(std::vector<Json::String> allReferencedDeclarations, std::map<Json::Value::Int, Json::String> variableMap)
+{
+	std::vector<Json::Value::Int> dup_arr;
+	bool start = true;
+	for(auto const& t: allReferencedDeclarations) {
+		if(t == "|")
+		{
+			start = true;
+			std::cout << std::endl;
+			continue;
+		}
+		if(start)
+		{
+			std::cout << "function: " << t << " uses global variable: ";
+			start = false;
+			dup_arr.clear();
+			continue;
+		}
+		auto item = variableMap.find(stoi(t));
+		bool is_dup = false;
+		if (item != variableMap.end())
+		{
+			for(auto const& d: dup_arr)
+			{
+				if(d == item->first)
+				{
+					is_dup = true;
+					break;
+				}
+			}
+			if(!is_dup)
+			{
+				std::cout << item->second << " ";
+				dup_arr.push_back(item->first);
+			}
+		}
+	}
+}
+
 void ASTJsonExporter::printAST(std::ostream& _stream, ASTNode const& _node, util::JsonFormat const& _format)
 {
 	Json::Value json_value = toJson(_node);
-	// std::map<Json::String, Json::Value::Int> variable_map;
-	// for (auto const& node: json_value["nodes"][1]["nodes"])
-	// {
-	// 	if (node["nodeType"] == "VariableDeclaration")
-	// 	{
-	// 		variable_map.insert(std::make_pair(node["name"].asString(), node["id"].asInt()));
-	// 	}
-	// }
-	// for (auto iter = variable_map.begin(); iter != variable_map.end(); iter++)
-	// {
-	// 	_stream << iter->first << " " << iter->second << std::endl;
-	// }
-
-	// for (auto const& node: json_value["nodes"][1]["nodes"])
-	// {
-	// 	if (node["nodeType"] == "FunctionDefinition")
-	// 	{
-	// 		Json::String function_name = node["name"].asString();
-	// 	}
-	// }
-	// std::vector<int> allReferencedDeclarations;
-	findAllReferencedDeclarations(json_value);
-	util::jsonPrint(json_value, _format);
-	// _stream << util::jsonPrint(json_value, _format) << std::endl;
-	_stream << "done" << std::endl;
+	std::map<Json::Value::Int, Json::String> variable_map;
+	for (auto const& node: json_value["nodes"][1]["nodes"])
+	{
+		if (node["nodeType"] == "VariableDeclaration")
+		{
+			variable_map.insert(std::make_pair(node["id"].asInt(), node["name"].asString()));
+		}
+	}
+	for (auto iter = variable_map.begin(); iter != variable_map.end(); iter++)
+	{
+		_stream << iter->first << " " << iter->second << std::endl;
+	}
+	std::vector<Json::String> allReferencedDeclarations;
+	findAllReferencedDeclarations(json_value, allReferencedDeclarations);;
+	parseReferencedDeclaration(allReferencedDeclarations, variable_map);
+	_stream << std::endl;
+	_stream << util::jsonPrint(json_value, _format) << std::endl;
 }
 void ASTJsonExporter::print(std::ostream& _stream, ASTNode const& _node, util::JsonFormat const& _format)
 {

@@ -785,13 +785,14 @@ void CommandLineInterface::assembleFromEVMAssemblyJSON()
 
 void CommandLineInterface::compile()
 {
-	sout() << "pororo compiling" << std::endl;
+	// sout() << "pororo compiling" << std::endl;
 	solAssert(CompilerInputModes.count(m_options.input.mode) == 1);
 	solAssert(!m_assemblyStack);
 	solAssert(!m_evmAssemblyStack && !m_compiler);
 
 	m_compiler = std::make_unique<CompilerStack>(m_universalCallback.callback());
 	m_assemblyStack = m_compiler.get();
+
 
 	SourceReferenceFormatter
 		formatter(serr(false), *m_compiler, coloredOutput(m_options), m_options.formatting.withErrorIds);
@@ -998,10 +999,10 @@ void CommandLineInterface::handleCombinedJSON()
 void CommandLineInterface::handleAst()
 {
 	solAssert(CompilerInputModes.count(m_options.input.mode) == 1);
-	sout() << "pororo handlingAST?? (1/2)" << std::endl;
+	// sout() << "pororo handlingAST?? (1/2)" << std::endl;
 	// if (!m_options.compiler.outputs.astCompactJson)
 	// 	return;
-	sout() << "pororo handlingAST?? (2/2)" << std::endl;
+	// sout() << "pororo handlingAST?? (2/2)" << std::endl;
 	std::vector<ASTNode const*> asts;
 	for (auto const& sourceCode: m_fileReader.sourceUnits())
 	{
