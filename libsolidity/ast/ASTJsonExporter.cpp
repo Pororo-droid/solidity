@@ -238,7 +238,8 @@ void ASTJsonExporter::parseReferencedDeclaration(std::vector<Json::String> allRe
 {
 	std::vector<Json::Value::Int> dup_arr;
 	bool start = true;
-	for(auto const& t: allReferencedDeclarations) {
+	for(auto const& t: allReferencedDeclarations) 
+	{
 		if(t == "|")
 		{
 			start = true;
@@ -269,6 +270,21 @@ void ASTJsonExporter::parseReferencedDeclaration(std::vector<Json::String> allRe
 				std::cout << item->second << " ";
 				dup_arr.push_back(item->first);
 			}
+		} else if (t == "-15")
+		{
+			for(auto const& d: dup_arr)
+			{
+				if(d == -15)
+				{
+					is_dup = true;
+					break;
+				}
+			}
+			if(!is_dup)
+			{
+				std::cout << "msg.sender ";
+				dup_arr.push_back(-15);
+			}
 		}
 	}
 }
@@ -289,7 +305,7 @@ void ASTJsonExporter::printAST(std::ostream& _stream, ASTNode const& _node, util
 		_stream << iter->first << " " << iter->second << std::endl;
 	}
 	std::vector<Json::String> allReferencedDeclarations;
-	findAllReferencedDeclarations(json_value, allReferencedDeclarations);;
+	findAllReferencedDeclarations(json_value, allReferencedDeclarations);
 	parseReferencedDeclaration(allReferencedDeclarations, variable_map);
 	_stream << std::endl;
 	_stream << util::jsonPrint(json_value, _format) << std::endl;
