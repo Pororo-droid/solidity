@@ -289,6 +289,67 @@ void ASTJsonExporter::parseReferencedDeclaration(std::vector<Json::String> allRe
 	}
 }
 
+void ASTJsonExporter::handleExpression(const Json::Value json_value) {
+	if (json_value["nodeType"] == "Identifier") {
+		std::cout << json_value["referencedDeclaration"] << " ";
+	}
+	Json::Value leftHandSide, rightHandSide;
+	
+	// maybe write statement
+	leftHandSide = json_value["leftHandSide"];
+	if (leftHandSide["nodeType"] == "IndexAccess") {
+		// base expression
+		std::cout << leftHandSide["baseExpression"]["referencedDeclaration"] << " ";
+
+		// index expression -> [warning] this goes again on expression....
+		std::cout << "[";
+		handleExpression(leftHandSide["indexExpression"]["expression"]);
+		std::cout << "]";
+	} else if (leftHandSide["nodeType"] == "Identifier") {
+		// go straight to referencedDeclaration
+		std::cout << leftHandSide["referencedDeclaration"] << " ";
+	} else if (leftHandSide["nodeType"] == "MemberAccess") {
+		handleExpression(leftHandSide["expression"]);
+	}
+
+	// maybe read statement but becareful with unary operations
+	rightHandSide = json_value["rightHandSide"];
+	if (rightHandSide["nodeType"] == "IndexAccess") {
+		// base expression
+		std::cout << rightHandSide["baseExpression"]["referencedDeclaration"] << " ";
+
+		// index expression -> [warning] this goes again on expression....
+		std::cout << "[";
+		handleExpression(rightHandSide["indexExpression"]["expression"]);
+		std::cout << "]";
+	} else if (rightHandSide["nodeType"] == "Identifier") {
+		// go straight to referencedDeclaration
+		std::cout << rightHandSide["referencedDeclaration"] << " ";
+	} else if (rightHandSide["nodeType"] == "MemberAccess") {
+		handleExpression(rightHandSide["expression"]);
+	}
+
+}
+
+void ASTJsonExporter::test(const Json::Value json_value) {
+	std::vector<Json::Value> nodeList;
+	for (auto const& node: json_value["nodes"][1]["nodes"]) {
+		if (node["nodeType"] != "FunctionDefinition")	continue;
+		std::cout << "Function Name: " << node["name"] << " ";
+		Json::Value statementList = node["body"]["statements"];
+		for (auto const& statement: statementList) {
+			if (statement["nodeType"] == "ExpressionStatement") {
+				ASTJsonExporter::handleExpression(statement["expression"]);
+			} else if (statement["nodeType"] == "VariableDeclarationStatement") {
+				ASTJsonExporter::handleExpression(statement["initialValue"]["expression"]);
+			}
+		}
+		std::cout << std::endl;
+		// std::cout << typeid(node["body"]["statements"]).name() << std::endl;
+
+	}
+}
+
 void ASTJsonExporter::printAST(std::ostream& _stream, ASTNode const& _node, util::JsonFormat const& _format)
 {
 	Json::Value json_value = toJson(_node);
@@ -305,8 +366,9 @@ void ASTJsonExporter::printAST(std::ostream& _stream, ASTNode const& _node, util
 		_stream << iter->first << " " << iter->second << std::endl;
 	}
 	std::vector<Json::String> allReferencedDeclarations;
-	findAllReferencedDeclarations(json_value, allReferencedDeclarations);
-	parseReferencedDeclaration(allReferencedDeclarations, variable_map);
+	test(json_value);
+	// findAllReferencedDeclarations(json_value, allReferencedDeclarations);
+	// parseReferencedDeclaration(allReferencedDeclarations, variable_map);
 	_stream << std::endl;
 	_stream << util::jsonPrint(json_value, _format) << std::endl;
 }
@@ -1071,6 +1133,7 @@ bool ASTJsonExporter::visit(Identifier const& _node)
 	Json::Value overloads(Json::arrayValue);
 	for (auto const& dec: _node.annotation().overloadedDeclarations)
 		overloads.append(nodeId(*dec));
+	
 	setJsonNode(
 		_node,
 		"Identifier",

@@ -198,6 +198,8 @@ private:
 	// pororo
 	void findAllReferencedDeclarations(const Json::Value json_value, std::vector<Json::String>& allReferencedDeclarations);
 	void parseReferencedDeclaration(std::vector<Json::String> allReferencedDeclarations, std::map<Json::Value::Int, Json::String> variableMap);
+	void test(const Json::Value json_value);
+	void handleExpression(const Json::Value json_value);
 };
 
 }
