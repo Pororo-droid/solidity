@@ -289,6 +289,27 @@ void ASTJsonExporter::parseReferencedDeclaration(std::vector<Json::String> allRe
 	}
 }
 
+void ASTJsonExporter::handleHandSide(const Json::Value json_value) {
+	if (json_value["nodeType"] == "IndexAccess") {
+		// base expression
+		std::cout << json_value["baseExpression"]["referencedDeclaration"] << " ";
+
+		// index expression -> [warning] this goes again on expression....
+		std::cout << "[";
+		handleExpression(json_value["indexExpression"]["expression"]);
+		std::cout << "]";
+		if (json_value["indexExpression"]["nodeType"] == "MemberAccess") {
+			std::cout << "." << json_value["indexExpression"]["memberName"] << " ";	
+		}
+	} else if (json_value["nodeType"] == "Identifier") {
+		// go straight to referencedDeclaration
+		std::cout << json_value["referencedDeclaration"] << " ";
+	} else if (json_value["nodeType"] == "MemberAccess") {
+		handleExpression(json_value["expression"]);
+		std::cout << "." << json_value["memberName"] << " ";
+	}
+}
+
 void ASTJsonExporter::handleExpression(const Json::Value json_value) {
 	if (json_value["nodeType"] == "Identifier") {
 		std::cout << json_value["referencedDeclaration"] << " ";
@@ -297,37 +318,11 @@ void ASTJsonExporter::handleExpression(const Json::Value json_value) {
 	
 	// maybe write statement
 	leftHandSide = json_value["leftHandSide"];
-	if (leftHandSide["nodeType"] == "IndexAccess") {
-		// base expression
-		std::cout << leftHandSide["baseExpression"]["referencedDeclaration"] << " ";
-
-		// index expression -> [warning] this goes again on expression....
-		std::cout << "[";
-		handleExpression(leftHandSide["indexExpression"]["expression"]);
-		std::cout << "]";
-	} else if (leftHandSide["nodeType"] == "Identifier") {
-		// go straight to referencedDeclaration
-		std::cout << leftHandSide["referencedDeclaration"] << " ";
-	} else if (leftHandSide["nodeType"] == "MemberAccess") {
-		handleExpression(leftHandSide["expression"]);
-	}
+	handleHandSide(leftHandSide);
 
 	// maybe read statement but becareful with unary operations
 	rightHandSide = json_value["rightHandSide"];
-	if (rightHandSide["nodeType"] == "IndexAccess") {
-		// base expression
-		std::cout << rightHandSide["baseExpression"]["referencedDeclaration"] << " ";
-
-		// index expression -> [warning] this goes again on expression....
-		std::cout << "[";
-		handleExpression(rightHandSide["indexExpression"]["expression"]);
-		std::cout << "]";
-	} else if (rightHandSide["nodeType"] == "Identifier") {
-		// go straight to referencedDeclaration
-		std::cout << rightHandSide["referencedDeclaration"] << " ";
-	} else if (rightHandSide["nodeType"] == "MemberAccess") {
-		handleExpression(rightHandSide["expression"]);
-	}
+	handleHandSide(rightHandSide);
 
 }
 
@@ -342,6 +337,9 @@ void ASTJsonExporter::test(const Json::Value json_value) {
 				ASTJsonExporter::handleExpression(statement["expression"]);
 			} else if (statement["nodeType"] == "VariableDeclarationStatement") {
 				ASTJsonExporter::handleExpression(statement["initialValue"]["expression"]);
+				if (statement["initialValue"]["nodeType"] == "MemberAccess") {
+					std::cout << "." << statement["initialValue"]["memberName"] << " ";
+				}
 			}
 		}
 		std::cout << std::endl;
