@@ -29,6 +29,7 @@
 #include <libevmasm/Instruction.h>
 
 #include <libsolutil/StackTooDeepString.h>
+#include <iostream>
 
 using namespace solidity;
 using namespace solidity::evmasm;
@@ -203,6 +204,7 @@ StorageItem::StorageItem(CompilerContext& _compilerContext, VariableDeclaration 
 {
 	solAssert(!_declaration.immutable(), "");
 	auto const& location = m_context.storageLocationOfVariable(_declaration);
+	std::cout << _declaration.name() << std::endl;
 	m_context << location.first << u256(location.second);
 }
 

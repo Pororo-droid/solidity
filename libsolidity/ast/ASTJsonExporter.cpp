@@ -46,6 +46,7 @@
 
 // pororo
 #include <map>
+#include <set>
 #include <string>
 
 using namespace std::string_literals;
@@ -326,25 +327,301 @@ void ASTJsonExporter::handleExpression(const Json::Value json_value) {
 
 }
 
-void ASTJsonExporter::test(const Json::Value json_value) {
-	std::vector<Json::Value> nodeList;
+Json::Value ASTJsonExporter::findFirstName(const Json::Value json_value)
+{
+	Json::Value::Members members;
+	try 
+	{
+		members = json_value.getMemberNames();
+	} catch (const std::exception& e) 
+	{
+		return json_value;
+	}
+	for (auto const& member: members)
+	{
+		if (member == "name")
+		{
+			return json_value[member];
+		}
+	}
+
+	for (auto const& member: members){
+		if (json_value[member].size() == 0)
+			continue;
+		else if(json_value[member].isArray())
+		{
+			for(auto const& node: json_value[member]) {
+				return findFirstName(node);
+			}
+		}
+		else
+		{
+			return findFirstName(json_value[member]);
+		}
+	}
+	return Json::Value("");
+}
+
+std::vector<std::pair<Json::Value, Json::Value>> ASTJsonExporter::findReferenceSet(const Json::Value json_value, std::vector<Json::Value> stateVariables)
+{
+	std::vector<std::pair<Json::Value, Json::Value>> referenceSet;
+	Json::Value::Members members;
+	try 
+	{
+		members = json_value.getMemberNames();
+	} catch (const std::exception& e) 
+	{
+		return referenceSet;
+	}
+	for (auto const& member: members)
+	{
+		if (member == "nodeType" && json_value["nodeType"] == "VariableDeclarationStatement")
+		{
+			for(auto const& declaration: json_value["declarations"])
+			{
+				if(declaration["storageLocation"] == "storage")
+				{
+					if(json_value["initialValue"])
+						referenceSet.push_back(std::make_pair(declaration["name"], findFirstName(json_value["initialValue"])));
+					else
+						referenceSet.push_back(std::make_pair(declaration["name"], Json::Value("")));
+				}			
+			}
+		}
+		if (json_value[member].size() == 0)
+			continue;
+		else if(json_value[member].isArray())
+		{
+			for(auto const& node: json_value[member])
+			{
+				for(auto const& name: findReferenceSet(node, stateVariables))
+					referenceSet.push_back(name);
+			}
+		}
+		else
+		{
+			for(auto const& name: findReferenceSet(json_value[member], stateVariables))
+				referenceSet.push_back(name);
+		}
+	}
+	return referenceSet;
+}
+
+Json::Value ASTJsonExporter::findReferenceSet2(const Json::Value json_value, const Json::Value target, std::vector<Json::Value> stateVariables)
+{
+	Json::Value::Members members;
+	try 
+	{
+		members = json_value.getMemberNames();
+	} catch (const std::exception& e) 
+	{
+		return Json::Value("");
+	}
+	for (auto const& member: members)
+	{
+		if (member == "nodeType" && json_value["nodeType"] == "Assignment")
+		{
+			Json::Value leftHandSide = findFirstName(json_value["leftHandSide"]);
+			Json::Value rightHandSide = findFirstName(json_value["rightHandSide"]);
+			if(leftHandSide == target && std::find(stateVariables.begin(), stateVariables.end(), rightHandSide) != stateVariables.end())
+				return rightHandSide;
+		}
+		
+		if (json_value[member].size() == 0)
+			continue;
+		else if(json_value[member].isArray())
+		{
+			for(auto const& node: json_value[member])
+			{
+				Json::Value result= findReferenceSet2(node, target, stateVariables);
+				if(result != "")
+					return result;
+			}
+		}
+		else
+		{
+			Json::Value result = findReferenceSet2(json_value[member], target, stateVariables);
+			if(result != "")
+				return result;
+		}	
+	}
+	return Json::Value("");
+}
+
+std::set<Json::Value> ASTJsonExporter::findWriteSet(const Json::Value json_value, std::vector<Json::Value> stateVariables, std::set<std::pair<Json::Value, Json::Value>> referenceVariables)
+{
+	std::set<Json::Value> writeSet;
+	Json::Value::Members members;
+	try 
+	{
+		members = json_value.getMemberNames();
+	} catch (const std::exception& e) 
+	{
+		return writeSet;
+	}
+	for (auto const& member: members)
+	{
+		if (member == "nodeType" && json_value["nodeType"] == "Assignment")
+		{
+			Json::Value leftHandSide = findFirstName(json_value["leftHandSide"]);
+			Json::Value rightHandSide = findFirstName(json_value["rightHandSide"]);
+			
+			// (a, b , c) = (1, 2, 3)
+			if(json_value["leftHandSide"]["components"].size() > 0){
+				for(auto const& component: json_value["leftHandSide"]["components"])
+				{
+					Json::Value componentName = findFirstName(component);
+					if(std::find(stateVariables.begin(), stateVariables.end(), componentName) != stateVariables.end())
+						writeSet.insert(componentName);
+
+					for(auto const& [name, value]: referenceVariables)
+							writeSet.insert(value);
+				}
+			}
+			else{
+				if(std::find(stateVariables.begin(), stateVariables.end(), leftHandSide) != stateVariables.end())
+					writeSet.insert(leftHandSide);
+
+				for(auto const& [name, value]: referenceVariables)
+					writeSet.insert(value);
+			}
+		}
+		else if (member == "nodeType" && json_value["nodeType"] == "UnaryOperation")
+		{
+			Json::Value unaryExpression = findFirstName(json_value["subExpression"]);
+			if(std::find(stateVariables.begin(), stateVariables.end(), unaryExpression) != stateVariables.end())
+				writeSet.insert(unaryExpression);
+			for(auto const& [name, value]: referenceVariables)
+			{
+				if(unaryExpression == name)
+					writeSet.insert(value);
+			}
+		}
+		else if (member == "nodeType" && json_value["nodeType"] == "FunctionCall")
+		{
+			
+		}
+
+		if (json_value[member].size() == 0)
+			continue;
+		else if(json_value[member].isArray())
+		{
+			for(auto const& node: json_value[member])
+			{
+				for(auto const& name: findWriteSet(node, stateVariables, referenceVariables))
+					writeSet.insert(name);
+			}
+		}
+		else
+		{
+			for(auto const& name: findWriteSet(json_value[member], stateVariables, referenceVariables))
+				writeSet.insert(name);
+		}
+	}
+	return writeSet;
+}
+
+void ASTJsonExporter::test(const Json::Value json_value)
+{
+	std::vector<Json::Value> stateVariables;
+	std::map<std::string, std::set<std::pair<Json::Value, Json::Value>>> refSet;
+	std::map<std::string, std::set<std::string>> writeSet;
+	std::map<std::string, std::set<std::string>> modifierSet;
+
+	// find state variables
 	for (auto const& node: json_value["nodes"][1]["nodes"]) {
-		if (node["nodeType"] != "FunctionDefinition")	continue;
-		std::cout << "Function Name: " << node["name"] << " ";
-		Json::Value statementList = node["body"]["statements"];
-		for (auto const& statement: statementList) {
-			if (statement["nodeType"] == "ExpressionStatement") {
-				ASTJsonExporter::handleExpression(statement["expression"]);
-			} else if (statement["nodeType"] == "VariableDeclarationStatement") {
-				ASTJsonExporter::handleExpression(statement["initialValue"]["expression"]);
-				if (statement["initialValue"]["nodeType"] == "MemberAccess") {
-					std::cout << "." << statement["initialValue"]["memberName"] << " ";
+		if (node["nodeType"] == "VariableDeclaration" && node["stateVariable"] == true) {
+			std::cout << "State Variable: " << node["name"] << std::endl;
+			stateVariables.push_back(node["name"]);
+		}
+	}
+	
+	// find storage reference variables
+	for (auto const& node: json_value["nodes"][1]["nodes"]) {
+		if (node["nodeType"] == "FunctionDefinition" || node["nodeType"] == "ModifierDefinition"){
+			for(auto const& jsonValue: node["body"]["statements"]) {
+				for(auto const& name: findReferenceSet(jsonValue, stateVariables)) {
+					if(node["kind"] == "fallback") 
+						refSet["fallback"].insert(name);
+					else if(node["kind"] == "receive")
+						refSet["receive"].insert(name);
+					else
+						refSet[node["name"].asString()].insert(name);
 				}
 			}
 		}
-		std::cout << std::endl;
-		// std::cout << typeid(node["body"]["statements"]).name() << std::endl;
+	}
 
+	// find complete storage reference variables
+	for (auto const& node: json_value["nodes"][1]["nodes"]) {
+		if (node["nodeType"] == "FunctionDefinition"|| node["nodeType"] == "ModifierDefinition"){
+			for(auto const& jsonValue: node["body"]["statements"]) {
+				if(node["kind"] == "fallback"){
+					for(auto [name, value]: refSet["fallback"]){
+						if(value == ""){
+							refSet["fallback"].erase(std::make_pair(name, value));
+							refSet["fallback"].insert(std::make_pair(name, findReferenceSet2(jsonValue, name, stateVariables)));
+						}
+					}
+				}
+				else if(node["kind"] == "receive"){
+					for(auto [name, value]: refSet["receive"]){
+						if(value == ""){
+							refSet["receive"].erase(std::make_pair(name, value));
+							refSet["receive"].insert(std::make_pair(name, findReferenceSet2(jsonValue, name, stateVariables)));
+						}
+					}
+				}
+				else {
+					for(auto [name, value]: refSet[node["name"].asString()]){
+						if(value == ""){
+							refSet[node["name"].asString()].erase(std::make_pair(name, value));
+							refSet[node["name"].asString()].insert(std::make_pair(name, findReferenceSet2(jsonValue, name, stateVariables)));
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	// find write set
+	for (auto const& node: json_value["nodes"][1]["nodes"]) {
+		if (node["nodeType"] == "FunctionDefinition" || node["nodeType"] == "ModifierDefinition"){
+			for(auto const& jsonValue: node["body"]["statements"]) {
+				if(node["kind"] == "fallback"){
+					for(auto const& name: findWriteSet(jsonValue, stateVariables, refSet["fallback"])) {
+						writeSet["fallback"].insert(name.asString());
+					}
+				}
+				else if(node["kind"] == "receive"){
+					for(auto const& name: findWriteSet(jsonValue, stateVariables, refSet["receive"])) {
+						writeSet["receive"].insert(name.asString());
+					}
+				}
+				else {
+					for(auto const& name: findWriteSet(jsonValue, stateVariables, refSet[node["name"].asString()])) {
+						writeSet[node["name"].asString()].insert(name.asString());
+					}
+				}
+			}
+		}
+		if(node["nodeType"] == "FunctionDefinition"){
+			for(auto const& jsonValue: node["modifiers"]) 
+				modifierSet[node["name"].asString()].insert(jsonValue["modifierName"]["name"].asString());
+		}
+	}
+	
+	for(auto const& [function, set]: writeSet) {
+		std::cout << "Function: " << function << ": ";
+		for(auto const& name: set) {
+			std::cout << name << " ";
+		}
+		for(auto const& modifier: modifierSet[function]) {
+			for(auto const& name: writeSet[modifier]) {
+				std::cout << name << " ";
+			}
+		}
+		std::cout << std::endl;
 	}
 }
 
@@ -352,6 +629,8 @@ void ASTJsonExporter::printAST(std::ostream& _stream, ASTNode const& _node, util
 {
 	Json::Value json_value = toJson(_node);
 	std::map<Json::Value::Int, Json::String> variable_map;
+	test(json_value);
+	/*
 	for (auto const& node: json_value["nodes"][1]["nodes"])
 	{
 		if (node["nodeType"] == "VariableDeclaration")
@@ -364,9 +643,9 @@ void ASTJsonExporter::printAST(std::ostream& _stream, ASTNode const& _node, util
 		_stream << iter->first << " " << iter->second << std::endl;
 	}
 	std::vector<Json::String> allReferencedDeclarations;
-	test(json_value);
 	// findAllReferencedDeclarations(json_value, allReferencedDeclarations);
 	// parseReferencedDeclaration(allReferencedDeclarations, variable_map);
+	*/
 	_stream << std::endl;
 	_stream << util::jsonPrint(json_value, _format) << std::endl;
 }

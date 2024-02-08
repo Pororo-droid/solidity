@@ -571,7 +571,10 @@ void ContractCompiler::appendReturnValuePacker(TypePointers const& _typeParamete
 void ContractCompiler::registerStateVariables(ContractDefinition const& _contract)
 {
 	for (auto const& var: ContractType(_contract).stateVariables())
+	{
+		std::cout << "Registering state variable: " << std::get<0>(var)->name() << " / Storage Offset: " << std::get<1>(var) << " / Byte Offset: " << std::get<2>(var) << std::endl;
 		m_context.addStateVariable(*std::get<0>(var), std::get<1>(var), std::get<2>(var));
+	}
 }
 
 void ContractCompiler::registerImmutableVariables(ContractDefinition const& _contract)
@@ -593,7 +596,7 @@ bool ContractCompiler::visit(VariableDeclaration const& _variableDeclaration)
 {
 	solAssert(_variableDeclaration.isStateVariable(), "Compiler visit to non-state variable declaration.");
 	CompilerContext::LocationSetter locationSetter(m_context, _variableDeclaration);
-
+	std::cout << "Compiling function: " << _variableDeclaration.name() << std::endl;
 	m_context.startFunction(_variableDeclaration);
 	m_breakTags.clear();
 	m_continueTags.clear();
@@ -613,7 +616,13 @@ bool ContractCompiler::visit(FunctionDefinition const& _function)
 	solAssert(_function.isImplemented(), "");
 
 	CompilerContext::LocationSetter locationSetter(m_context, _function);
-
+	
+	if(_function.isFallback())
+		std::cout << "Compiling function: fallback" << std::endl;
+	else if(_function.isReceive())
+		std::cout << "Compiling function: receive" << std::endl;
+	else
+		std::cout << "Compiling function: " << _function.name() << std::endl;
 	m_context.startFunction(_function);
 
 	// stack upon entry: [return address] [arg0] [arg1] ... [argn]

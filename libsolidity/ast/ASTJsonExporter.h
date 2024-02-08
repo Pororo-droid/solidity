@@ -38,6 +38,7 @@
 #include <vector>
 // pororo
 #include <map>
+#include <set>
 #include <string>
 
 namespace solidity::langutil
@@ -198,6 +199,10 @@ private:
 	// pororo
 	void findAllReferencedDeclarations(const Json::Value json_value, std::vector<Json::String>& allReferencedDeclarations);
 	void parseReferencedDeclaration(std::vector<Json::String> allReferencedDeclarations, std::map<Json::Value::Int, Json::String> variableMap);
+	Json::Value findFirstName(const Json::Value json_value);
+	Json::Value findReferenceSet2(const Json::Value json_value, const Json::Value target, std::vector<Json::Value> stateVariables);
+	std::vector<std::pair<Json::Value, Json::Value>> findReferenceSet(const Json::Value json_value, std::vector<Json::Value> stateVariables);
+	std::set<Json::Value> findWriteSet(const Json::Value json_value, std::vector<Json::Value> stateVariables, std::set<std::pair<Json::Value, Json::Value>> referenceVariables);
 	void test(const Json::Value json_value);
 	void handleExpression(const Json::Value json_value);
 	void handleHandSide(const Json::Value json_value);
