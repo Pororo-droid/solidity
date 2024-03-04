@@ -1037,7 +1037,6 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 		case FunctionType::Kind::BlockHash:
 		{
 			acceptAndConvert(*arguments[0], *function.parameterTypes()[0], true);
-			std::cout << "Read: blockhash" << std::endl;
 			m_context << Instruction::BLOCKHASH;
 			break;
 		}
@@ -1867,67 +1866,67 @@ bool ExpressionCompiler::visit(MemberAccess const& _memberAccess)
 		// we can ignore the kind of magic and only look at the name of the member
 		if (member == "coinbase")
 		{
-			std::cout << "Read: block.coinbase" << std::endl;
+			std::cout << "block.coinbase" << std::endl;
 			m_context << Instruction::COINBASE;
 		}
 		else if (member == "timestamp")
 		{
-			std::cout << "Read: block.timestamp" << std::endl;
+			std::cout << "block.timestamp" << std::endl;
 			m_context << Instruction::TIMESTAMP;
 		}
 		else if (member == "difficulty" || member == "prevrandao")
 		{
-			std::cout << "Read: block.difficulty" << std::endl;
+			std::cout << "block.difficulty" << std::endl;
 			m_context << Instruction::PREVRANDAO;
 		}
 		else if (member == "number")
 		{
-			std::cout << "Read: block.number" << std::endl;
+			std::cout << "block.number" << std::endl;
 			m_context << Instruction::NUMBER;
 		}
 		else if (member == "gaslimit")
 		{
-			std::cout << "Read: block.gaslimit" << std::endl;
+			std::cout << "block.gaslimit" << std::endl;
 			m_context << Instruction::GASLIMIT;
 		}
 		else if (member == "sender")
 		{
-			std::cout << "Read: msg.sender" << std::endl;
+			std::cout << "msg.sender" << std::endl;
 			m_context << Instruction::CALLER;
 		}
 		else if (member == "value")
 		{
-			std::cout << "Read: msg.value" << std::endl;
+			std::cout << "msg.value" << std::endl;
 			m_context << Instruction::CALLVALUE;
 		}
 		else if (member == "origin")
 		{
-			std::cout << "Read: tx.origin" << std::endl;
+			std::cout << "tx.origin" << std::endl;
 			m_context << Instruction::ORIGIN;
 		}
 		else if (member == "gasprice")
 		{
-			std::cout << "Read: block.gaslimit" << std::endl;
+			std::cout << "block.gaslimit" << std::endl;
 			m_context << Instruction::GASPRICE;
 		}
 		else if (member == "chainid")
 		{
-			std::cout << "Read: block.chainid" << std::endl;
+			std::cout << "block.chainid" << std::endl;
 			m_context << Instruction::CHAINID;
 		}
 		else if (member == "basefee")
 		{
-			std::cout << "Read: block.basefee" << std::endl;
+			std::cout << "block.basefee" << std::endl;
 			m_context << Instruction::BASEFEE;
 		}
 		else if (member == "data")
 		{
-			std::cout << "Read: msg.data" << std::endl;
+			std::cout << "msg.data" << std::endl;
 			m_context << u256(0) << Instruction::CALLDATASIZE;
 		}
 		else if (member == "sig")
 		{
-			std::cout << "Read: msg.sig" << std::endl;
+			std::cout << "msg.sig" << std::endl;
 			m_context << u256(0) << Instruction::CALLDATALOAD
 				<< (u256(0xffffffff) << (256 - 32)) << Instruction::AND;
 		}

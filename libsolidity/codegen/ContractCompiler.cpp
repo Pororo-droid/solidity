@@ -572,7 +572,6 @@ void ContractCompiler::registerStateVariables(ContractDefinition const& _contrac
 {
 	for (auto const& var: ContractType(_contract).stateVariables())
 	{
-		std::cout << "Registering state variable: " << std::get<0>(var)->name() << " / Storage Offset: " << std::get<1>(var) << " / Byte Offset: " << std::get<2>(var) << std::endl;
 		m_context.addStateVariable(*std::get<0>(var), std::get<1>(var), std::get<2>(var));
 	}
 }
