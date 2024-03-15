@@ -41,12 +41,6 @@
 #include <set>
 #include <string>
 
-struct ReadWriteFunctionCall
-{
-	std::vector<std::string> calledFunctionSet;
-	std::vector<std::string> readSet;
-	std::vector<std::string> writeSet;
-};
 
 namespace solidity::langutil
 {
@@ -208,9 +202,12 @@ private:
 	void parseReferencedDeclaration(std::vector<Json::String> allReferencedDeclarations, std::map<Json::Value::Int, Json::String> variableMap);
 	Json::Value findFirstName(const Json::Value json_value);
 	Json::Value findReferenceSet2(const Json::Value json_value, const Json::Value target, std::vector<Json::Value> stateVariables);
+	Json::Value extractRweSet(const Json::Value json_value);
 	std::vector<std::pair<Json::Value, Json::Value>> findReferenceSet(const Json::Value json_value, std::vector<Json::Value> stateVariables);
-	ReadWriteFunctionCall findReadWriteSet(const Json::Value json_value, std::vector<Json::Value> stateVariables, std::vector<Json::Value> declaredFunctions);
-	void test(const Json::Value json_value);
+	std::vector<Json::Value> deleteFalseRead(std::vector<Json::Value> res);
+	std::vector<Json::Value> deleteDuplicate(std::vector<Json::Value> res);
+	std::vector<Json::Value> orderingExternalRweSet(std::vector<Json::Value> externalRweSet, std::vector<std::string> modifierSet, std::map<std::string, std::vector<Json::Value>> externalRweSets, long unsigned int idx);
+	std::pair<std::vector<Json::Value>, std::vector<Json::Value>> findReadWriteSet(const Json::Value json_value, std::vector<Json::Value> stateVariables, std::vector<Json::Value> declaredFunctions);
 	void handleExpression(const Json::Value json_value);
 	void handleHandSide(const Json::Value json_value);
 };
