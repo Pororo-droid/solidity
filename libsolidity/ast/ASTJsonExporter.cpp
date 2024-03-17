@@ -473,30 +473,19 @@ std::vector<Json::Value> ASTJsonExporter::deleteFalseRead(std::vector<Json::Valu
 std::vector<Json::Value> ASTJsonExporter::deleteDuplicate(std::vector<Json::Value> res)
 {
 	std::vector<Json::Value> newRes;
-	//std::cout << "deleteDuplicate" << std::endl;
 	for(auto const& node: res)
 	{
-		//std::cout << node["name"] << " " << node["type"] << std::endl;
-		bool flag = false;
-		for(auto const& newNode: newRes)
-		{
-			if(node["name"] == newNode["name"] && node["type"] == newNode["type"])
-			{
-				flag = true;
-				break;
-			}
-		}
-		if(!flag)
+		if(std::find(newRes.begin(), newRes.end(), node) == newRes.end())
 			newRes.push_back(node);
 	}
 	return newRes;
 }
 
-std::vector<Json::Value> ASTJsonExporter::orderingExternalRweSet(std::vector<Json::Value> externalRweSet, std::vector<std::string> modifierSet, std::map<std::string, std::vector<Json::Value>> externalRweSets, long unsigned int idx)
+std::vector<Json::Value> ASTJsonExporter::orderingExternalRweSet(std::string funcName, std::vector<std::string> modifierSet, std::map<std::string, std::vector<Json::Value>> externalRweSets, long unsigned int idx)
 {
 	std::vector<Json::Value> orderedExternalRweSet;
 	if(idx >= modifierSet.size())
-		return externalRweSet;
+		return externalRweSets[funcName];
 	
 	for(auto const& element: externalRweSets[modifierSet[idx]])
 	{
@@ -504,7 +493,7 @@ std::vector<Json::Value> ASTJsonExporter::orderingExternalRweSet(std::vector<Jso
 			orderedExternalRweSet.push_back(element);
 		else
 		{
-			auto const& res = orderingExternalRweSet(externalRweSet, modifierSet, externalRweSets, idx+1);
+			auto const& res = orderingExternalRweSet(funcName, modifierSet, externalRweSets, idx+1);
 			orderedExternalRweSet.insert(orderedExternalRweSet.end(), res.begin(), res.end());
 		}
 	}
@@ -721,8 +710,10 @@ std::pair<std::vector<Json::Value>, std::vector<Json::Value>> ASTJsonExporter::f
 			if(std::find(declaredFunctions.begin(), declaredFunctions.end(), json_value["expression"]["name"]) != declaredFunctions.end())
 			{
 				Json::Value res(Json::objectValue);
+				std::string functionType = json_value["expression"]["typeDescriptions"]["typeString"].asString();
+				functionType = functionType.substr(functionType.find("("), functionType.find(")") - functionType.find("(") + 1);
 				res["type"] = "execute";
-				res["name"] = json_value["expression"]["name"].asString();
+				res["name"] = json_value["expression"]["name"].asString() + functionType;
 				rweSet.push_back(res);
 			}
 			else if(json_value["expression"]["expression"]["memberName"] == "call" || json_value["expression"]["expression"]["memberName"] == "staticcall")
@@ -907,24 +898,22 @@ Json::Value ASTJsonExporter::extractRweSet(const Json::Value json_value)
 	{
 		std::vector<Json::Value> set = rweSet[function.asString()];
 		for(auto const& modifierName: modifierSet[function.asString()])
-		{
 			set.insert(set.end(), rweSet[modifierName].begin(), rweSet[modifierName].end());
-			rweSet[function.asString()] = deleteDuplicate(set);
-		}
+		rweSet[function.asString()] = deleteDuplicate(set);
+		externalRweSet[function.asString()] = orderingExternalRweSet(function.asString(), modifierSet[function.asString()], externalRweSet, 0);
 	}
 
-	for(auto [function, set]: externalRweSet)
-		set = orderingExternalRweSet(set, modifierSet[function], externalRweSet, 0);
-	
-
-	for(auto [function, set]: rweSet)
+	for(auto const& functionName: declaredFunctions)
 	{
+		std::string function = functionName.asString();
+		std::vector<Json::Value> set = rweSet[function];
 		Json::Value functionRweSet;
 		Json::Value inRweSet;
 		Json::Value exRweSet(Json::arrayValue);
 		Json::Value readSet(Json::arrayValue);
 		Json::Value writeSet(Json::arrayValue);
 		Json::Value executeSet(Json::arrayValue);
+		
 
 		functionRweSet["function"] = function;
 		for(auto const& element: set)

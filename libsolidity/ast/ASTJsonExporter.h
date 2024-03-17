@@ -206,7 +206,7 @@ private:
 	std::vector<std::pair<Json::Value, Json::Value>> findReferenceSet(const Json::Value json_value, std::vector<Json::Value> stateVariables);
 	std::vector<Json::Value> deleteFalseRead(std::vector<Json::Value> res);
 	std::vector<Json::Value> deleteDuplicate(std::vector<Json::Value> res);
-	std::vector<Json::Value> orderingExternalRweSet(std::vector<Json::Value> externalRweSet, std::vector<std::string> modifierSet, std::map<std::string, std::vector<Json::Value>> externalRweSets, long unsigned int idx);
+	std::vector<Json::Value> orderingExternalRweSet(std::string funcName, std::vector<std::string> modifierSet, std::map<std::string, std::vector<Json::Value>> externalRweSets, long unsigned int idx);
 	std::pair<std::vector<Json::Value>, std::vector<Json::Value>> findReadWriteSet(const Json::Value json_value, std::vector<Json::Value> stateVariables, std::vector<Json::Value> declaredFunctions);
 	void handleExpression(const Json::Value json_value);
 	void handleHandSide(const Json::Value json_value);
