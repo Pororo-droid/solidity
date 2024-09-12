@@ -43,7 +43,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-
+#include <filesystem>
 // pororo
 #include <map>
 #include <set>
@@ -500,7 +500,63 @@ std::vector<Json::Value> ASTJsonExporter::orderingExternalRweSet(std::string fun
 	return orderedExternalRweSet;
 }
 
-std::pair<std::vector<Json::Value>, std::vector<Json::Value>> ASTJsonExporter::findReadWriteSet(const Json::Value json_value, std::vector<Json::Value> stateVariables, std::vector<Json::Value> declaredFunctions)
+std::string ASTJsonExporter::findFullFunctionName(const Json::Value json_value)
+{
+	std::string functionName = json_value["name"].asString();
+	functionName += "(";
+	for(auto const& jsonValue: json_value["parameters"]["parameters"]) {
+		functionName += jsonValue["typeDescriptions"]["typeString"].asString();
+		if(jsonValue["storageLocation"].asString() != "default")
+			functionName += " " + jsonValue["storageLocation"].asString();
+		functionName += ",";
+	}
+	if(json_value["parameters"]["parameters"].size() > 0)
+		functionName.pop_back();
+	functionName += ")";
+	return functionName;
+}
+
+std::vector<Json::Value> ASTJsonExporter::mergeExternalRweSet(std::string baseFunction, std::map<std::string, std::vector<Json::Value>> externalRweSets)
+{
+	std::vector<Json::Value> externalRweSet;
+	for(auto const& element: externalRweSets[baseFunction])
+	{
+		if(element["type"] == "internalExecute")
+		{
+			std::vector<Json::Value> res = mergeExternalRweSet(element["name"].asString(), externalRweSets);
+			externalRweSet.insert(externalRweSet.end(), res.begin(), res.end());
+		}
+		else
+			externalRweSet.push_back(element);
+	}
+	return externalRweSet;
+}
+
+std::vector<Json::Value> ASTJsonExporter::mergeExecuteSet(std::vector<std::string> mergedFunctions, std::vector<std::string> mergingFunctions, std::map<std::string, std::vector<Json::Value>> rweSets)
+{
+	std::vector<Json::Value> rweSet;
+	for(auto const& functionName: mergingFunctions)
+	{
+		if(std::find(mergedFunctions.begin(), mergedFunctions.end(), functionName) == mergedFunctions.end())
+		{
+			std::vector<std::string> executeSet;
+			mergedFunctions.push_back(functionName);
+			for(auto const& element: rweSets[functionName])
+			{
+				if(element["type"] == "execute")
+				{
+					executeSet.push_back(element["name"].asString());
+				}
+				rweSet.push_back(element);
+			}
+			std::vector<Json::Value> res = mergeExecuteSet(mergedFunctions, executeSet, rweSets);
+			rweSet.insert(rweSet.end(), res.begin(), res.end());
+		}
+	}
+	return rweSet;
+}
+
+std::pair<std::vector<Json::Value>, std::vector<Json::Value>> ASTJsonExporter::findReadWriteSet(const Json::Value json_value, std::vector<Json::Value> stateVariables, std::vector<std::string> declaredFunctions)
 {
 	std::vector<Json::Value> rweSet;
 	std::vector<Json::Value> externalRweSet;
@@ -565,7 +621,7 @@ std::pair<std::vector<Json::Value>, std::vector<Json::Value>> ASTJsonExporter::f
 					rweSet.push_back(res);
 				}
 			}
-			else if(json_value["expression"]["referencedDeclaration"] < 0)
+			else if(json_value["expression"]["referencedDeclaration"] && json_value["expression"]["referencedDeclaration"] < 0)
 			{
 				if(json_value["memberName"] == "coinbase")
 				{
@@ -707,14 +763,29 @@ std::pair<std::vector<Json::Value>, std::vector<Json::Value>> ASTJsonExporter::f
 
 		if (member == "nodeType" && json_value["nodeType"] == "FunctionCall")
 		{
-			if(std::find(declaredFunctions.begin(), declaredFunctions.end(), json_value["expression"]["name"]) != declaredFunctions.end())
+			std::string functionName = json_value["expression"]["name"].asString();
+			std::string functionType = json_value["expression"]["typeDescriptions"]["typeString"].asString();
+			functionType = functionType.substr(functionType.find("("), functionType.find(")") - functionType.find("(") + 1);
+			functionName += functionType;
+			if(std::find(declaredFunctions.begin(), declaredFunctions.end(), functionName) != declaredFunctions.end())
 			{
 				Json::Value res(Json::objectValue);
-				std::string functionType = json_value["expression"]["typeDescriptions"]["typeString"].asString();
-				functionType = functionType.substr(functionType.find("("), functionType.find(")") - functionType.find("(") + 1);
 				res["type"] = "execute";
-				res["name"] = json_value["expression"]["name"].asString() + functionType;
+				res["name"] = functionName;
 				rweSet.push_back(res);
+				res["type"] = "internalExecute";
+				externalRweSet.push_back(res);
+			}
+			// Make function that find keyword inside node to simplify
+			else if(json_value["expression"]["memberName"] == "call" || json_value["expression"]["memberName"] == "staticcall")
+			{
+				if(json_value["expression"]["expression"]["typeDescriptions"]["typeString"].asString().find("address") != std::string::npos)
+				{
+					Json::Value res(Json::objectValue);
+					res["type"] = "execute";
+					res["name"] = json_value["arguments"][0]["arguments"][0]["value"].asString();
+					externalRweSet.push_back(res);
+				}
 			}
 			else if(json_value["expression"]["expression"]["memberName"] == "call" || json_value["expression"]["expression"]["memberName"] == "staticcall")
 			{
@@ -763,7 +834,8 @@ std::pair<std::vector<Json::Value>, std::vector<Json::Value>> ASTJsonExporter::f
 Json::Value ASTJsonExporter::extractRweSet(const Json::Value json_value)
 {
 	std::vector<Json::Value> stateVariables;
-	std::vector<Json::Value> declaredFunctions;
+	std::vector<std::string> declaredFunctions;
+	std::vector<FunctionName> declaredFunctionSelectors;
 	std::map<std::string, std::set<std::pair<Json::Value, Json::Value>>> refSet;
 	std::map<std::string, std::vector<Json::Value>> rweSet;
 	std::map<std::string, std::vector<Json::Value>> externalRweSet;
@@ -772,17 +844,34 @@ Json::Value ASTJsonExporter::extractRweSet(const Json::Value json_value)
 
 	// find state variables, function names, and address parameter
 	for (auto const& node: json_value["nodes"][1]["nodes"]) {
-		if (node["nodeType"] == "VariableDeclaration" && node["stateVariable"] == true) {
+		if (node["nodeType"] == "VariableDeclaration" && node["stateVariable"] == true && node["mutability"] != "immutable" && node["constant"] == false) {
 			stateVariables.push_back(node["name"]);
 		}
 		if (node["nodeType"] == "FunctionDefinition") {
-			declaredFunctions.push_back(node["name"]);
+			FunctionName funcName;
+			if(node["kind"] == "fallback" || node["kind"] == "receive"){
+				declaredFunctions.push_back(node["kind"].asString());
+				funcName.name = node["kind"].asString();
+				funcName.functionSelector = "";
+				declaredFunctionSelectors.push_back(funcName);
+			}
+			else{
+				declaredFunctions.push_back(findFullFunctionName(node));
+				funcName.name = findFullFunctionName(node);
+				funcName.functionSelector = node["functionSelector"].asString();
+				declaredFunctionSelectors.push_back(funcName);
+			}
 		}
 	}
 	
 	// find storage reference variables
 	for (auto const& node: json_value["nodes"][1]["nodes"]) {
 		if (node["nodeType"] == "FunctionDefinition" || node["nodeType"] == "ModifierDefinition"){
+			std::string functionName;
+			if(node["nodeType"] == "FunctionDefinition")
+				functionName = findFullFunctionName(node);
+			else
+				functionName = node["name"].asString();
 			for(auto const& jsonValue: node["body"]["statements"]) {
 				for(auto const& name: findReferenceSet(jsonValue, stateVariables)) {
 					if(node["kind"] == "fallback") 
@@ -790,7 +879,7 @@ Json::Value ASTJsonExporter::extractRweSet(const Json::Value json_value)
 					else if(node["kind"] == "receive")
 						refSet["receive"].insert(name);
 					else
-						refSet[node["name"].asString()].insert(name);
+						refSet[functionName].insert(name);
 				}
 			}
 		}
@@ -799,6 +888,11 @@ Json::Value ASTJsonExporter::extractRweSet(const Json::Value json_value)
 	// find complete storage reference variables
 	for (auto const& node: json_value["nodes"][1]["nodes"]) {
 		if (node["nodeType"] == "FunctionDefinition"|| node["nodeType"] == "ModifierDefinition"){
+			std::string functionName;
+			if(node["nodeType"] == "FunctionDefinition")
+				functionName = findFullFunctionName(node);
+			else
+				functionName = node["name"].asString();
 			for(auto const& jsonValue: node["body"]["statements"]) {
 				if(node["kind"] == "fallback"){
 					for(auto [name, value]: refSet["fallback"]){
@@ -817,10 +911,10 @@ Json::Value ASTJsonExporter::extractRweSet(const Json::Value json_value)
 					}
 				}
 				else {
-					for(auto [name, value]: refSet[node["name"].asString()]){
+					for(auto [name, value]: refSet[functionName]){
 						if(value == ""){
-							refSet[node["name"].asString()].erase(std::make_pair(name, value));
-							refSet[node["name"].asString()].insert(std::make_pair(name, findReferenceSet2(jsonValue, name, stateVariables)));
+							refSet[functionName].erase(std::make_pair(name, value));
+							refSet[functionName].insert(std::make_pair(name, findReferenceSet2(jsonValue, name, stateVariables)));
 						}
 					}
 				}
@@ -833,6 +927,11 @@ Json::Value ASTJsonExporter::extractRweSet(const Json::Value json_value)
 	{
 		if (node["nodeType"] == "FunctionDefinition" || node["nodeType"] == "ModifierDefinition")
 		{
+			std::string functionName;
+			if(node["nodeType"] == "FunctionDefinition")
+				functionName = findFullFunctionName(node);
+			else
+				functionName = node["name"].asString();
 			for(auto const& jsonValue: node["body"]["statements"])
 			{
 				if(node["kind"] == "fallback")
@@ -868,19 +967,19 @@ Json::Value ASTJsonExporter::extractRweSet(const Json::Value json_value)
 					}
 				}
 				else
-				{
+				{	
 					auto [res, externalRes] = findReadWriteSet(jsonValue, stateVariables, declaredFunctions);
 					res = deleteFalseRead(res);
-					rweSet[node["name"].asString()].insert(rweSet[node["name"].asString()].end(), res.begin(), res.end());
-					externalRweSet[node["name"].asString()].insert(externalRweSet[node["name"].asString()].end(), externalRes.begin(), externalRes.end());
-					for(auto const& refName: refSet[node["name"].asString()])
+					rweSet[functionName].insert(rweSet[functionName].end(), res.begin(), res.end());
+					externalRweSet[functionName].insert(externalRweSet[functionName].end(), externalRes.begin(), externalRes.end());
+					for(auto const& refName: refSet[functionName])
 					{
 						Json::Value reference;
 						reference["type"] = "read";
 						reference["name"] = refName.second.asString();
-						rweSet[node["name"].asString()].push_back(reference);
+						rweSet[functionName].push_back(reference);
 						reference["type"] = "write";
-						rweSet[node["name"].asString()].push_back(reference);
+						rweSet[functionName].push_back(reference);
 					}
 				}
 			}
@@ -889,51 +988,72 @@ Json::Value ASTJsonExporter::extractRweSet(const Json::Value json_value)
 		if(node["nodeType"] == "FunctionDefinition")
 		{
 			for(auto const& jsonValue: node["modifiers"]) 
-				modifierSet[node["name"].asString()].push_back(jsonValue["modifierName"]["name"].asString());
+				modifierSet[findFullFunctionName(node)].push_back(jsonValue["modifierName"]["name"].asString());
 		}
 	}
 	
 
-	for(auto const& function: declaredFunctions)
-	{
-		std::vector<Json::Value> set = rweSet[function.asString()];
-		for(auto const& modifierName: modifierSet[function.asString()])
-			set.insert(set.end(), rweSet[modifierName].begin(), rweSet[modifierName].end());
-		rweSet[function.asString()] = deleteDuplicate(set);
-		externalRweSet[function.asString()] = orderingExternalRweSet(function.asString(), modifierSet[function.asString()], externalRweSet, 0);
-	}
-
 	for(auto const& functionName: declaredFunctions)
 	{
-		std::string function = functionName.asString();
-		std::vector<Json::Value> set = rweSet[function];
+		std::vector<Json::Value> set = rweSet[functionName];
+		for(auto const& modifierName: modifierSet[functionName])
+			set.insert(set.end(), rweSet[modifierName].begin(), rweSet[modifierName].end());
+		rweSet[functionName] = deleteDuplicate(set);
+		externalRweSet[functionName] = orderingExternalRweSet(functionName, modifierSet[functionName], externalRweSet, 0);
+	}
+
+	// merge execute set
+	for(auto const& functionName: declaredFunctions)
+	{
+		std::vector<std::string> mergedFunctions(0);
+		std::vector<std::string> mergingFunctions;
+		for(auto const& element: rweSet[functionName])
+		{
+			if(element["type"] == "execute")
+				mergingFunctions.push_back(element["name"].asString());
+		}
+		std::vector<Json::Value> res = mergeExecuteSet(mergedFunctions, mergingFunctions, rweSet);
+		rweSet[functionName].insert(rweSet[functionName].end(), res.begin(), res.end());
+		rweSet[functionName] = deleteDuplicate(rweSet[functionName]);
+		externalRweSet[functionName] = mergeExternalRweSet(functionName, externalRweSet);
+	}
+
+	for(auto const& functionName: declaredFunctionSelectors)
+	{
+		std::vector<Json::Value> set = rweSet[functionName.name];
 		Json::Value functionRweSet;
-		Json::Value inRweSet;
 		Json::Value exRweSet(Json::arrayValue);
 		Json::Value readSet(Json::arrayValue);
 		Json::Value writeSet(Json::arrayValue);
-		Json::Value executeSet(Json::arrayValue);
 		
 
-		functionRweSet["function"] = function;
+		functionRweSet["function"] = functionName.name;
+		functionRweSet["functionSelector"] = functionName.functionSelector;
 		for(auto const& element: set)
 		{
 			if(element["type"] == "read")
 				readSet.append(element["name"]);
 			else if(element["type"] == "write")
 				writeSet.append(element["name"]);
-			else if(element["type"] == "execute")
-				executeSet.append(element["name"]);
+
 		}
-		inRweSet["readSet"] = readSet;
-		inRweSet["writeSet"] = writeSet;
-		inRweSet["executeSet"] = executeSet;
-		functionRweSet["internalRweSet"] = inRweSet;
-		for(auto const& element: externalRweSet[function])
+		functionRweSet["readSet"] = readSet;
+		functionRweSet["writeSet"] = writeSet;
+		for(auto const& element: externalRweSet[functionName.name])
 			exRweSet.append(element);
 		functionRweSet["externalRweSet"] = exRweSet;
 		contractRweSet.append(functionRweSet);
 	}
+
+	// save to json file at ../../rwSet/rwSet.json
+	// only if rwSet.json is not exist
+	if(!std::filesystem::exists("../../rwSet/rwSet.json"))
+	{
+		std::ofstream out("../../rwSet/rwSet.json");
+		out << contractRweSet;
+		out.close();
+	}
+	
 	return contractRweSet;
 }
 
@@ -941,8 +1061,8 @@ void ASTJsonExporter::printAST(std::ostream& _stream, ASTNode const& _node, util
 {
 	Json::Value json_value = toJson(_node);
 	std::map<Json::Value::Int, Json::String> variable_map;
-	_stream << util::jsonPrint(extractRweSet(json_value), util::JsonFormat{ util::JsonFormat::Pretty }) << std::endl;
-	/*
+	// _stream << util::jsonPrint(extractRweSet(json_value), util::JsonFormat{ util::JsonFormat::Pretty }) << std::endl;
+	
 	for (auto const& node: json_value["nodes"][1]["nodes"])
 	{
 		if (node["nodeType"] == "VariableDeclaration")
@@ -955,10 +1075,8 @@ void ASTJsonExporter::printAST(std::ostream& _stream, ASTNode const& _node, util
 		_stream << iter->first << " " << iter->second << std::endl;
 	}
 	std::vector<Json::String> allReferencedDeclarations;
-	// findAllReferencedDeclarations(json_value, allReferencedDeclarations);
-	// parseReferencedDeclaration(allReferencedDeclarations, variable_map);
-	*/
-
+	findAllReferencedDeclarations(json_value, allReferencedDeclarations);
+	parseReferencedDeclaration(allReferencedDeclarations, variable_map);
 	_stream << std::endl;
 	_stream << util::jsonPrint(json_value, _format) << std::endl;
 	

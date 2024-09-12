@@ -207,9 +207,15 @@ private:
 	std::vector<Json::Value> deleteFalseRead(std::vector<Json::Value> res);
 	std::vector<Json::Value> deleteDuplicate(std::vector<Json::Value> res);
 	std::vector<Json::Value> orderingExternalRweSet(std::string funcName, std::vector<std::string> modifierSet, std::map<std::string, std::vector<Json::Value>> externalRweSets, long unsigned int idx);
-	std::pair<std::vector<Json::Value>, std::vector<Json::Value>> findReadWriteSet(const Json::Value json_value, std::vector<Json::Value> stateVariables, std::vector<Json::Value> declaredFunctions);
+	std::string findFullFunctionName(const Json::Value json_value);
+	std::vector<Json::Value> mergeExecuteSet(std::vector<std::string> mergedFunctions, std::vector<std::string> mergingFunctions, std::map<std::string, std::vector<Json::Value>> rweSet);
+	std::vector<Json::Value> mergeExternalRweSet(std::string baseFunction, std::map<std::string, std::vector<Json::Value>> externalRweSets);
+	std::pair<std::vector<Json::Value>, std::vector<Json::Value>> findReadWriteSet(const Json::Value json_value, std::vector<Json::Value> stateVariables, std::vector<std::string> declaredFunctions);
 	void handleExpression(const Json::Value json_value);
 	void handleHandSide(const Json::Value json_value);
 };
-
+struct FunctionName {
+	std::string name;
+	std::string functionSelector;
+};
 }
